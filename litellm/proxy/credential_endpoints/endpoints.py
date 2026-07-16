@@ -58,13 +58,6 @@ def _is_proxy_admin(user_api_key_dict: UserAPIKeyAuth) -> bool:
     return user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN
 
 
-def _masked_list_values(credential_values: dict, *, hide_otel_headers: bool) -> dict:
-    masked_values = _get_masked_values(credential_values)
-    if not hide_otel_headers or "otel_headers" not in masked_values:
-        return masked_values
-    return {**masked_values, "otel_headers": "********"}
-
-
 def _summarize_validation_error(ve: ValidationError) -> str:
     parts = (".".join(str(loc) for loc in err["loc"]) + ": " + err["msg"] for err in ve.errors())
     return "; ".join(parts)
@@ -339,9 +332,13 @@ async def get_credentials(
         masked_credentials = [
             {
                 "credential_name": credential.credential_name,
-                "credential_values": _masked_list_values(
-                    credential.credential_values,
-                    hide_otel_headers=not is_proxy_admin,
+                "credential_values": (
+                    {
+                        **_get_masked_values(credential.credential_values),
+                        "otel_headers": "********",
+                    }
+                    if not is_proxy_admin and "otel_headers" in credential.credential_values
+                    else _get_masked_values(credential.credential_values)
                 ),
                 "credential_info": credential.credential_info,
             }
