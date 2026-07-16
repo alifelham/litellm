@@ -58,6 +58,13 @@ def _is_proxy_admin(user_api_key_dict: UserAPIKeyAuth) -> bool:
     return user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN
 
 
+def _masked_list_values(credential_values: dict, *, hide_otel_headers: bool) -> dict:
+    masked_values = _get_masked_values(credential_values)
+    if not hide_otel_headers or "otel_headers" not in masked_values:
+        return masked_values
+    return {**masked_values, "otel_headers": "********"}
+
+
 def _summarize_validation_error(ve: ValidationError) -> str:
     parts = (".".join(str(loc) for loc in err["loc"]) + ": " + err["msg"] for err in ve.errors())
     return "; ".join(parts)
@@ -306,7 +313,8 @@ async def get_credentials(
     from litellm.proxy.proxy_server import prisma_client
 
     try:
-        if _is_proxy_admin(user_api_key_dict):
+        is_proxy_admin = _is_proxy_admin(user_api_key_dict)
+        if is_proxy_admin:
             visible = list(litellm.credential_list)
         else:
             scope = await _caller_admin_scope(user_api_key_dict, prisma_client)
@@ -331,7 +339,10 @@ async def get_credentials(
         masked_credentials = [
             {
                 "credential_name": credential.credential_name,
-                "credential_values": _get_masked_values(credential.credential_values),
+                "credential_values": _masked_list_values(
+                    credential.credential_values,
+                    hide_otel_headers=not is_proxy_admin,
+                ),
                 "credential_info": credential.credential_info,
             }
             for credential in visible
